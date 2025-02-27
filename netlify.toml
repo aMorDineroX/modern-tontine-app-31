@@ -7,6 +7,14 @@
   to = "/index.html"
   status = 200
 
+[context.preview]
+  command = "bun run build"
+
+[stackbit]
+  container_slug = "stackbit-visual-editor"
+  preview_command = "bun run dev"
+  preview_port = 5173
+
 [stackbit]
   container_slug = "stackbit-visual-editor"
 

@@ -1,4 +1,4 @@
-import { defineStackbitConfig } from '@stackbit/types';
+import { defineStackbitConfig, SiteMapEntry } from '@stackbit/types';
 import { GitContentSource } from '@stackbit/cms-git';
 
 export default defineStackbitConfig({
@@ -10,7 +10,7 @@ export default defineStackbitConfig({
       models: [
         // Page models
         {
-          name: 'page',
+          name: 'Page',
           type: 'page',
           urlPath: '/{slug}',
           filePath: 'src/content/pages/{slug}.md',
@@ -27,7 +27,7 @@ export default defineStackbitConfig({
         },
         // Component models
         {
-          name: 'hero',
+          name: 'Hero',
           type: 'object',
           fields: [
             { name: 'heading', type: 'string', required: true },
@@ -43,21 +43,25 @@ export default defineStackbitConfig({
     })
   ],
   // Define site map to help the visual editor navigate between pages
-  siteMap: async () => {
-    return [
-      {
-        path: '/',
-        title: 'Home',
-      },
-      {
-        path: '/about',
-        title: 'About',
-      },
-      {
-        path: '/contact',
-        title: 'Contact',
-      }
-    ];
+  siteMap: ({ documents, models }) => {
+    // Filter all page models
+    const pageModels = models.filter((m) => m.type === 'page');
+
+    return documents
+      // Filter all documents which are of a page model
+      .filter((d) => pageModels.some(m => m.name === d.modelName))
+      // Map each document to a SiteMapEntry
+      .map((document) => {
+        const slug = document.fields.slug || '';
+        
+        return {
+          stableId: document.id,
+          urlPath: slug === 'home' ? '/' : `/${slug}`,
+          document,
+          isHomePage: slug === 'home',
+        };
+      })
+      .filter(Boolean) as SiteMapEntry[];
   },
   // Customize the visual editor experience
   visual: {
@@ -66,7 +70,7 @@ export default defineStackbitConfig({
     // Define components that can be added to content
     components: {
       // Map component models to React components
-      hero: {
+      Hero: {
         // This would be the path to your Hero component
         component: 'src/components/Hero'
       }
