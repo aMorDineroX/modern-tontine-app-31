@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -117,6 +116,6 @@
   }
   
   .tontine-input {
-    @apply rounded-md border border-gray-200 p-2 focus:border-tontine-purple focus:ring-1 focus:ring-tontine-purple focus:outline-none;
+    @apply rounded-md border border-gray-200 p-2 focus:border-tontine-purple focus:ring-1 focus:ring-tontine-purple focus:outline-none text-black dark:text-white bg-white dark:bg-gray-700 placeholder-gray-500 dark:placeholder-gray-400;
   }
 }

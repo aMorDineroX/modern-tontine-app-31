@@ -1,4 +1,3 @@
-
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -26,6 +25,7 @@ export default function ProtectedRoute() {
 
 export function AuthRoute() {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   // Show loading state if still checking authentication
   if (loading) {
@@ -38,7 +38,9 @@ export function AuthRoute() {
   
   // Redirect to dashboard if already authenticated
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    // Check if there's a 'from' state in location
+    const from = location.state?.from?.pathname || '/dashboard';
+    return <Navigate to={from} replace />;
   }
 
   // Render auth routes if not authenticated

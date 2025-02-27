@@ -1,7 +1,6 @@
-
 import { Menu, X, Settings, LogOut } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,9 +12,11 @@ export default function Navbar() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { t } = useApp();
   const { signOut } = useAuth();
+  const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
+    navigate('/');
   };
 
   return (

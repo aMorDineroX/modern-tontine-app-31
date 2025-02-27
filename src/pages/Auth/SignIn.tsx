@@ -1,9 +1,9 @@
-
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, UserRound, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -13,16 +13,25 @@ export default function SignIn() {
   const { signIn } = useAuth();
   const { t } = useApp();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+
     try {
-      setIsSubmitting(true);
-      await signIn(email, password);
-      console.log("User signed in, navigating to dashboard");
-      navigate("/dashboard");
+      const success = await signIn(email, password);
+      if (success) {
+        console.log("User signed in, navigating to dashboard");
+        navigate("/dashboard");
+      }
     } catch (error) {
       console.error("Sign in error:", error);
+      toast({
+        title: "Login Failed",
+        description: "Invalid email or password. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
     }
