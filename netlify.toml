@@ -6,3 +6,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+[stackbit]
+  container_slug = "stackbit-visual-editor"
+
+[context.preview]
+  command = "bun run build"
