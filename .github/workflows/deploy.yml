@@ -29,6 +29,11 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_BASE_URL: /modern-tontine-app-31/
+
+      - name: Copy .htaccess
+        run: cp public/.htaccess dist/.htaccess
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
@@ -36,3 +41,4 @@ jobs:
           folder: dist
           token: ${{ secrets.GITHUB_TOKEN }}
           clean: true
+          single-commit: true
