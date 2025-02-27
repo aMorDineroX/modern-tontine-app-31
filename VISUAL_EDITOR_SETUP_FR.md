@@ -59,8 +59,8 @@ Ajoutez à votre `package.json` :
 
 ### Checklist Finale
 
-- [ ] Branche "preview" créée (ou "main" utilisée)
-- [ ] Dépendances Stackbit installées
+- [ x] Branche "preview" créée (ou "main" utilisée)
+- [x ] Dépendances Stackbit installées
 - [ ] Configuration Netlify mise à jour
 - [ ] `stackbit.config.ts` configuré
 - [ ] Fichiers de contenu en place

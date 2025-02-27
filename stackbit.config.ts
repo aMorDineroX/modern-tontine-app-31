@@ -7,6 +7,7 @@ export default defineStackbitConfig({
     new GitContentSource({
       rootPath: __dirname,
       contentDirs: ['src/content'],
+      branches: ['main', 'preview'], // Supporter plusieurs branches
       models: [
         // Page models
         {
@@ -42,15 +43,15 @@ export default defineStackbitConfig({
       ]
     })
   ],
-  // Define site map to help the visual editor navigate between pages
+  // Définir la carte du site pour aider à la navigation dans l'éditeur visuel
   siteMap: ({ documents, models }) => {
-    // Filter all page models
+    // Filtrer tous les modèles de pages
     const pageModels = models.filter((m) => m.type === 'page');
 
     return documents
-      // Filter all documents which are of a page model
+      // Filtrer tous les documents qui sont des modèles de pages
       .filter((d) => pageModels.some(m => m.name === d.modelName))
-      // Map each document to a SiteMapEntry
+      // Mapper chaque document à une entrée de carte du site
       .map((document) => {
         const slug = document.fields.slug || '';
         
@@ -63,15 +64,15 @@ export default defineStackbitConfig({
       })
       .filter(Boolean) as SiteMapEntry[];
   },
-  // Customize the visual editor experience
+  // Personnaliser l'expérience de l'éditeur visuel
   visual: {
-    // Enable inline editing
+    // Activer l'édition en ligne
     inlineEditing: true,
-    // Define components that can be added to content
+    // Définir les composants qui peuvent être ajoutés au contenu
     components: {
-      // Map component models to React components
+      // Mapper les modèles de composants aux composants React
       Hero: {
-        // This would be the path to your Hero component
+        // Chemin vers votre composant Hero
         component: 'src/components/Hero'
       }
     }
