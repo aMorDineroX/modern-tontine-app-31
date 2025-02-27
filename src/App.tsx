@@ -25,7 +25,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter basename={import.meta.env.MODE === 'production' ? '/modern-tontine-app-31' : '/'}>
+          <BrowserRouter>
             <Routes>
               {/* Landing page */}
               <Route path="/" element={<LandingPage />} />

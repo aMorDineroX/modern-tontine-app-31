@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  base: mode === 'production' ? '/modern-tontine-app-31/' : './',
+  base: '/',
   plugins: [
     react(),
     mode === 'development' &&

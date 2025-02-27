@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const baseUrl = process.env.VITE_BASE_URL || '/modern-tontine-app-31/';
+const baseUrl = process.env.VITE_BASE_URL || '/';
 
 function preprocessHtml() {
   const indexPath = path.resolve(__dirname, '../dist/index.html');
