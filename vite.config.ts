@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  base: mode === 'production' ? '/modern-tontine-app-31/' : '/',
+  base: mode === 'production' ? '/modern-tontine-app-31/' : './',
   plugins: [
     react(),
     mode === 'development' &&
@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     outDir: 'dist',
-    assetsDir: 'assets', // Assurez-vous que les ressources sont dans un dossier assets
+    assetsDir: 'assets',
     rollupOptions: {
       output: {
         manualChunks(id) {
