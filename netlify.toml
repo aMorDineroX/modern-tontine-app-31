@@ -18,9 +18,3 @@
   preview_command = "bun run dev"
   preview_port = 5173
   preview_branch = "main"  # Utiliser main comme branche de prévisualisation
-
-[stackbit]
-  container_slug = "stackbit-visual-editor"
-
-[context.preview]
-  command = "bun run build"
