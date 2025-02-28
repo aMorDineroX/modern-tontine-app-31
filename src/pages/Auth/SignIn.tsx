@@ -4,6 +4,7 @@ import { Eye, EyeOff, UserRound, KeyRound } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
 import { useToast } from "@/hooks/use-toast";
+import SocialLoginButtons from "@/components/auth/SocialLoginButtons";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -171,6 +172,8 @@ export default function SignIn() {
               {isSubmitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
+
+          <SocialLoginButtons className="mt-6" />
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">

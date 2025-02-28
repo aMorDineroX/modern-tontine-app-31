@@ -4,6 +4,7 @@ import { Eye, EyeOff, UserRound, KeyRound, Mail, AlertCircle } from "lucide-reac
 import { useAuth } from "@/contexts/AuthContext";
 import { useApp } from "@/contexts/AppContext";
 import { useToast } from "@/hooks/use-toast";
+import SocialLoginButtons from "@/components/auth/SocialLoginButtons";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -312,6 +313,8 @@ export default function SignUp() {
               {isSubmitting ? "Creating Account..." : "Create Account"}
             </button>
           </form>
+
+          <SocialLoginButtons className="mt-6" />
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600 dark:text-gray-400">

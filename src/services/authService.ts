@@ -11,6 +11,7 @@ export interface User {
   createdAt?: string;
   updatedAt?: string;
   profileImage?: string;
+  provider?: AuthProvider;
 }
 
 export enum UserRole {
@@ -18,6 +19,14 @@ export enum UserRole {
   MANAGER = 'manager',
   USER = 'user',
   GUEST = 'guest'
+}
+
+export enum AuthProvider {
+  EMAIL = 'email',
+  GOOGLE = 'google',
+  FACEBOOK = 'facebook',
+  TWITTER = 'twitter',
+  APPLE = 'apple'
 }
 
 export enum Permission {
@@ -140,7 +149,8 @@ const simulatedUsers: User[] = [
       Permission.CREATE_TONTINE,
       Permission.MAKE_PAYMENT
     ],
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    provider: AuthProvider.EMAIL
   },
   {
     id: 'admin_1',
@@ -155,7 +165,8 @@ const simulatedUsers: User[] = [
       Permission.VIEW_REPORTS,
       Permission.EXPORT_DATA
     ],
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    provider: AuthProvider.EMAIL
   }
 ];
 
@@ -211,7 +222,8 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
       Permission.CREATE_TONTINE,
       Permission.MAKE_PAYMENT
     ],
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    provider: AuthProvider.EMAIL
   };
 
   // Ajouter l'utilisateur aux utilisateurs simulés
@@ -231,6 +243,91 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
     authResponse.user,
     authResponse.expiresAt,
     false,
+    authResponse.refreshToken
+  );
+
+  return authResponse;
+};
+
+// Fonction pour la connexion via réseaux sociaux
+export const socialLogin = async (provider: AuthProvider, accessToken: string): Promise<AuthResponse> => {
+  // Simuler un délai de requête
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  // Simuler des données utilisateur basées sur le fournisseur
+  let userData: Partial<User> = {};
+  
+  switch (provider) {
+    case AuthProvider.GOOGLE:
+      userData = {
+        email: `google_user_${Math.random().toString(36).substring(2, 9)}@gmail.com`,
+        name: `Google User ${Math.floor(Math.random() * 1000)}`,
+        profileImage: 'https://via.placeholder.com/150'
+      };
+      break;
+    case AuthProvider.FACEBOOK:
+      userData = {
+        email: `fb_user_${Math.random().toString(36).substring(2, 9)}@facebook.com`,
+        name: `Facebook User ${Math.floor(Math.random() * 1000)}`,
+        profileImage: 'https://via.placeholder.com/150'
+      };
+      break;
+    case AuthProvider.TWITTER:
+      userData = {
+        email: `twitter_user_${Math.random().toString(36).substring(2, 9)}@twitter.com`,
+        name: `Twitter User ${Math.floor(Math.random() * 1000)}`,
+        profileImage: 'https://via.placeholder.com/150'
+      };
+      break;
+    case AuthProvider.APPLE:
+      userData = {
+        email: `apple_user_${Math.random().toString(36).substring(2, 9)}@icloud.com`,
+        name: `Apple User ${Math.floor(Math.random() * 1000)}`,
+        profileImage: 'https://via.placeholder.com/150'
+      };
+      break;
+    default:
+      throw new Error('Fournisseur d\'authentification non pris en charge');
+  }
+
+  // Vérifier si l'utilisateur existe déjà
+  let user = simulatedUsers.find(u => u.email === userData.email);
+  
+  if (!user) {
+    // Créer un nouvel utilisateur
+    user = {
+      id: `user_${Math.random().toString(36).substring(2, 9)}`,
+      email: userData.email!,
+      name: userData.name!,
+      role: UserRole.USER,
+      permissions: [
+        Permission.READ_TONTINE,
+        Permission.CREATE_TONTINE,
+        Permission.MAKE_PAYMENT
+      ],
+      createdAt: new Date().toISOString(),
+      profileImage: userData.profileImage,
+      provider: provider
+    };
+    
+    // Ajouter l'utilisateur aux utilisateurs simulés
+    simulatedUsers.push(user);
+  }
+
+  // Créer une réponse d'authentification simulée
+  const authResponse: AuthResponse = {
+    user,
+    token: `mock_token_${Math.random().toString(36).substring(2, 15)}`,
+    expiresAt: Date.now() + 3600000, // 1 heure
+    refreshToken: `mock_refresh_token_${Math.random().toString(36).substring(2, 15)}`
+  };
+
+  // Sauvegarder les données d'authentification
+  saveAuthData(
+    authResponse.token,
+    authResponse.user,
+    authResponse.expiresAt,
+    true, // Toujours se souvenir pour les connexions sociales
     authResponse.refreshToken
   );
 
@@ -486,6 +583,7 @@ export const getUserPermissions = (): Permission[] => {
 const authService = {
   login,
   signup,
+  socialLogin,
   logout,
   resetPassword,
   refreshToken,
@@ -501,7 +599,8 @@ const authService = {
   isValidEmail,
   isStrongPassword,
   UserRole,
-  Permission
+  Permission,
+  AuthProvider
 };
 
 export default authService;

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import authService, { User, Permission, UserRole } from '@/services/authService';
+import authService, { User, Permission, UserRole, AuthProvider } from '@/services/authService';
 
 interface Session {
   user: User;
@@ -16,6 +16,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   signUp: (email: string, password: string, fullName: string) => Promise<boolean>;
+  signInWithSocial: (provider: AuthProvider) => Promise<boolean>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateProfile: (userData: Partial<User>) => Promise<boolean>;
@@ -213,6 +214,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const signInWithSocial = async (provider: AuthProvider): Promise<boolean> => {
+    setLoading(true);
+    try {
+      // Simuler un token d'accès obtenu du fournisseur OAuth
+      const mockAccessToken = `mock_${provider}_token_${Math.random().toString(36).substring(2, 15)}`;
+      
+      // Appeler le service de connexion sociale
+      const response = await authService.socialLogin(provider, mockAccessToken);
+      
+      // Mettre à jour l'état avec la réponse
+      setUser(response.user);
+      setSession({
+        user: response.user,
+        token: response.token,
+        expiresAt: response.expiresAt,
+        refreshToken: response.refreshToken
+      });
+      setIsAuthenticated(true);
+      
+      toast({
+        title: "Connexion réussie",
+        description: `Bienvenue ${response.user.name} !`,
+      });
+      
+      return true;
+    } catch (error) {
+      console.error(`Erreur de connexion via ${provider}:`, error);
+      
+      let errorMessage = `Échec de la connexion via ${provider}`;
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Échec de la connexion",
+        description: errorMessage,
+        variant: "destructive"
+      });
+      
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signOut = async () => {
     setLoading(true);
     try {
@@ -339,6 +385,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isAuthenticated,
     signIn,
     signUp,
+    signInWithSocial,
     signOut,
     resetPassword,
     updateProfile,
