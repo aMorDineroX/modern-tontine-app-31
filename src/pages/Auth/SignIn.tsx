@@ -9,18 +9,48 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<{email?: string; password?: string}>({});
   const { signIn } = useAuth();
   const { t } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const validateForm = () => {
+    const newErrors: {email?: string; password?: string} = {};
+    let isValid = true;
+
+    // Email validation
+    if (!email) {
+      newErrors.email = "Email is required";
+      isValid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = "Please enter a valid email address";
+      isValid = false;
+    }
+
+    // Password validation
+    if (!password) {
+      newErrors.password = "Password is required";
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     setIsSubmitting(true);
 
     try {
-      const success = await signIn(email, password);
+      const success = await signIn(email, password, rememberMe);
       if (success) {
         console.log("User signed in, navigating to dashboard");
         navigate("/dashboard");
@@ -64,12 +94,18 @@ export default function SignIn() {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="tontine-input pl-10 w-full"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errors.email) setErrors({...errors, email: undefined});
+                  }}
+                  className={`tontine-input pl-10 w-full ${errors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                   placeholder="you@example.com"
                   required
                 />
               </div>
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+              )}
             </div>
 
             <div>
@@ -84,8 +120,11 @@ export default function SignIn() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="tontine-input pl-10 w-full"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password) setErrors({...errors, password: undefined});
+                  }}
+                  className={`tontine-input pl-10 w-full ${errors.password ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                   placeholder="••••••••"
                   required
                 />
@@ -101,7 +140,23 @@ export default function SignIn() {
                   )}
                 </button>
               </div>
-              <div className="flex justify-end mt-1">
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-500">{errors.password}</p>
+              )}
+              <div className="flex justify-between mt-2">
+                <div className="flex items-center">
+                  <input
+                    id="remember-me"
+                    name="remember-me"
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 text-tontine-purple focus:ring-tontine-purple border-gray-300 rounded"
+                  />
+                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                    Remember me
+                  </label>
+                </div>
                 <Link to="/forgot-password" className="text-sm text-tontine-purple hover:text-tontine-dark-purple dark:text-tontine-light-purple dark:hover:text-tontine-purple">
                   Forgot password?
                 </Link>

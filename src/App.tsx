@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,7 +11,7 @@ import SignUp from "./pages/Auth/SignUp";
 import ForgotPassword from "./pages/Auth/ForgotPassword";
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Index";
-import ProtectedRoute, { AuthRoute } from "./components/ProtectedRoute";
+import AuthRoute from "./components/ProtectedRoute";
 import { AppProvider } from "./contexts/AppContext";
 import { AuthProvider } from "./contexts/AuthContext";
 
@@ -31,14 +30,14 @@ const App = () => (
               <Route path="/" element={<LandingPage />} />
 
               {/* Auth routes */}
-              <Route element={<AuthRoute />}>
+              <Route element={<AuthRoute requireAuth={false} />}>
                 <Route path="/signin" element={<SignIn />} />
                 <Route path="/signup" element={<SignUp />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
               </Route>
               
               {/* Protected routes */}
-              <Route element={<ProtectedRoute />}>
+              <Route element={<AuthRoute />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/groups" element={<Groups />} />
