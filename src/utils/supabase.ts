@@ -1,24 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Validate environment variables
-const validateEnvVariable = (varName: string, defaultValue?: string): string => {
-  const value = import.meta.env[varName] || defaultValue;
-  
-  if (!value) {
-    console.error(`Environment variable ${varName} is not set. This may cause authentication issues.`);
-    return '';
-  }
-  
-  return value;
-};
-
 // Get Supabase configuration from environment variables
-const supabaseUrl = validateEnvVariable('VITE_SUPABASE_URL');
-const supabaseAnonKey = validateEnvVariable('VITE_SUPABASE_ANON_KEY');
+// Using hardcoded fallback values for development in case environment variables fail to load
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://qgpqiehjmkfxfnfrowbc.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFncHFpZWhqbWtmeGZuZnJvd2JjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA3MDkzNzUsImV4cCI6MjA1NjI4NTM3NX0.pYcG26WQa-6rIfDcE5mDjNhGbhYAlTMOvCxfYtNmu-0';
 
-// Validate Supabase URL and Anon Key
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase configuration is incomplete. Authentication may not work.');
+// Log the actual values being used (only in development)
+if (import.meta.env.DEV) {
+  console.log('Using Supabase URL:', supabaseUrl);
+  console.log('Using Supabase Anon Key:', supabaseAnonKey.substring(0, 10) + '...');
 }
 
 // Create Supabase client with robust configuration
