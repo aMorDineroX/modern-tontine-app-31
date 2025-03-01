@@ -13,13 +13,21 @@ function getSupabaseConfig() {
   // Validate configuration
   if (!supabaseUrl || !supabaseAnonKey) {
     console.error('Supabase configuration is incomplete. Authentication may not work.');
+    
+    // Provide more detailed guidance
+    if (!supabaseUrl) {
+      console.warn('VITE_SUPABASE_URL is missing. Please check your .env file.');
+    }
+    if (!supabaseAnonKey) {
+      console.warn('VITE_SUPABASE_ANON_KEY is missing. Please check your .env file.');
+    }
   }
 
   // Log configuration details (only in development)
   if (import.meta.env.DEV) {
     console.log('Supabase Configuration:', {
       url: supabaseUrl ? 'Configured' : 'Missing',
-      anonKey: supabaseAnonKey ? 'Configured' : 'Missing'
+      anonKey: supabaseAnonKey ? 'Configured (first 10 chars)' : 'Missing'
     });
   }
 
@@ -40,8 +48,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       
       if (event === 'SIGNED_OUT') {
         console.log('User signed out');
+        // Clear any local storage related to authentication
+        localStorage.removeItem('signup_attempts');
       } else if (event === 'SIGNED_IN') {
         console.log('User signed in');
+        // Clear signup attempts on successful login
+        localStorage.removeItem('signup_attempts');
       }
     }
   },
@@ -62,41 +74,66 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Enhanced health check function
 export async function checkSupabaseAvailability(): Promise<boolean> {
   try {
-    // Try multiple methods to check availability
-    try {
-      // Try to get the session
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) {
-        console.warn('Session check failed:', sessionError);
-        return false;
-      }
-    } catch (sessionCheckError) {
-      console.error('Error checking session:', sessionCheckError);
-      return false;
-    }
+    // Track the start time of the availability check
+    const startTime = Date.now();
 
-    try {
-      // Try to do a simple table select to check database connectivity
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .limit(1);
-      
-      if (error) {
-        console.warn('Profiles table check failed:', error);
-        return false;
+    // Try multiple methods to check availability with timeout
+    const checkSession = new Promise<boolean>(async (resolve) => {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.warn('Session check failed:', sessionError);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      } catch (sessionCheckError) {
+        console.error('Error checking session:', sessionCheckError);
+        resolve(false);
       }
-    } catch (tableCheckError) {
-      console.error('Error checking profiles table:', tableCheckError);
-      return false;
-    }
-    
-    return true;
+    });
+
+    const checkTable = new Promise<boolean>(async (resolve) => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id')
+          .limit(1);
+        
+        if (error) {
+          console.warn('Profiles table check failed:', error);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      } catch (tableCheckError) {
+        console.error('Error checking profiles table:', tableCheckError);
+        resolve(false);
+      }
+    });
+
+    // Wait for either check to complete or timeout after 5 seconds
+    const result = await Promise.race([
+      Promise.all([checkSession, checkTable]).then(results => results.every(r => r)),
+      new Promise<boolean>(resolve => setTimeout(() => resolve(false), 5000))
+    ]);
+
+    // Log the time taken for the availability check
+    const endTime = Date.now();
+    console.log(`Supabase availability check took ${endTime - startTime}ms`);
+
+    return result;
   } catch (error) {
     console.error('Comprehensive Supabase availability check failed:', error);
     return false;
   }
+}
+
+// Function to reset signup attempts
+export function resetSignupAttempts(email: string) {
+  const signupAttemptKey = `signup_attempt_${email}`;
+  localStorage.removeItem(signupAttemptKey);
 }
 
 // Define User type for use throughout the application

@@ -117,6 +117,37 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
     // Log the signup attempt with sanitized credentials
     console.log('Attempting signup with email:', credentials.email.replace(/(.{2}).*(@.*)/, '$1***$2'));
     
+    // Validate signup credentials
+    if (!isValidEmail(credentials.email)) {
+      throw new AuthServiceError('Adresse email invalide');
+    }
+    
+    if (!isStrongPassword(credentials.password)) {
+      throw new AuthServiceError('Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre');
+    }
+
+    // Log the signup attempt with sanitized credentials
+    console.log('Attempting signup with email:', credentials.email.replace(/(.{2}).*(@.*)/, '$1***$2'));
+    
+    // Track signup attempts to prevent excessive retries
+    const signupAttemptKey = `signup_attempt_${credentials.email}`;
+    const currentAttempts = parseInt(localStorage.getItem(signupAttemptKey) || '0', 10);
+    
+    if (currentAttempts >= 3) {
+      throw new AuthServiceError(
+        'Trop de tentatives d\'inscription. Veuillez attendre quelques minutes avant de réessayer.',
+        'TOO_MANY_ATTEMPTS'
+      );
+    }
+
+    // Increment signup attempts
+    localStorage.setItem(signupAttemptKey, (currentAttempts + 1).toString());
+
+    // Set a timeout to reset signup attempts
+    setTimeout(() => {
+      localStorage.removeItem(signupAttemptKey);
+    }, 5 * 60 * 1000); // 5 minutes
+
     // Créer l'utilisateur dans Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: credentials.email,
@@ -128,6 +159,68 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
         }
       }
     });
+
+    // If signup is successful, reset signup attempts
+    if (authData.user) {
+      localStorage.removeItem(signupAttemptKey);
+    }
+
+    // If signup fails, handle potential issues
+    if (authError) {
+      // Detailed error logging
+      console.error('Signup Error Details:', {
+        code: authError.code,
+        message: authError.message,
+        status: authError.status
+      });
+
+      // Handle rate limiting errors
+      if (authError.status === 429) {
+        throw new AuthServiceError(
+          'Trop de tentatives d\'inscription. Le service est temporairement limité. Veuillez réessayer dans quelques minutes.',
+          '429_RATE_LIMIT',
+          authError
+        );
+      }
+
+      // Handle email already in use
+      if (
+        authError.message.includes('already in use') || 
+        authError.message.includes('email already registered')
+      ) {
+        throw new AuthServiceError(
+          'Cette adresse email est déjà utilisée. Voulez-vous vous connecter ?',
+          'EMAIL_IN_USE',
+          authError
+        );
+      }
+
+      // Handle network or server errors
+      if (
+        authError.message.includes('network') || 
+        authError.message.includes('fetch') || 
+        authError.status === 500
+      ) {
+        throw new AuthServiceError(
+          'Erreur de connexion. Veuillez vérifier votre connexion internet et réessayer.',
+          'NETWORK_ERROR',
+          authError
+        );
+      }
+
+      // For any other unexpected errors
+      throw new AuthServiceError(
+        'Une erreur inattendue est survenue lors de l\'inscription. Veuillez réessayer.',
+        'UNEXPECTED_ERROR',
+        authError
+      );
+    }
+
+    // Return user and session data
+    return {
+      user: authData.user,
+      session: authData.session
+    };
 
     // If signup fails, handle potential issues
     if (authError) {
