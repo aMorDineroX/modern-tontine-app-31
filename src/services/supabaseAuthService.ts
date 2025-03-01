@@ -128,6 +128,84 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
         }
       }
     });
+
+    // If signup fails due to database issues, try to create the profiles table
+    if (authError && (
+      authError.message.includes('Database error') || 
+      authError.message.includes('table does not exist') || 
+      authError.code === '42P01' // Undefined table
+    )) {
+      console.warn('Signup failed due to database issue. Attempting to create profiles table...');
+      
+      try {
+        // Try to create the profiles table directly
+        const { error: tableCreateError } = await supabase.query(`
+          CREATE TABLE IF NOT EXISTS public.profiles (
+            id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+            email TEXT NOT NULL,
+            full_name TEXT,
+            avatar_url TEXT,
+            phone_number TEXT,
+            preferred_language TEXT DEFAULT 'fr',
+            notification_preferences JSONB DEFAULT '{"email": true, "push": true, "sms": false}'::jsonb,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+          );
+          
+          -- Set up Row Level Security (RLS)
+          ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+          
+          -- Create policies
+          CREATE POLICY IF NOT EXISTS "Users can view their own profile"
+            ON public.profiles
+            FOR SELECT
+            USING (auth.uid() = id);
+          
+          CREATE POLICY IF NOT EXISTS "Users can update their own profile"
+            ON public.profiles
+            FOR UPDATE
+            USING (auth.uid() = id);
+          
+          CREATE POLICY IF NOT EXISTS "Users can insert their own profile"
+            ON public.profiles
+            FOR INSERT
+            WITH CHECK (auth.uid() = id);
+        `);
+        
+        if (tableCreateError) {
+          console.error('Failed to create profiles table:', tableCreateError);
+          throw tableCreateError;
+        }
+        
+        // Retry signup after creating the table
+        const { data: retryAuthData, error: retryAuthError } = await supabase.auth.signUp({
+          email: credentials.email,
+          password: credentials.password,
+          options: {
+            data: {
+              full_name: credentials.fullName
+            }
+          }
+        });
+        
+        if (retryAuthError) {
+          console.error('Signup failed after table creation:', retryAuthError);
+          throw retryAuthError;
+        }
+        
+        return {
+          user: retryAuthData.user,
+          session: retryAuthData.session
+        };
+      } catch (tableCreationError) {
+        console.error('Critical error during signup table creation:', tableCreationError);
+        throw new AuthServiceError(
+          'Erreur critique lors de l\'inscription. Impossible de créer le profil utilisateur.',
+          'DATABASE_SETUP_FAILED',
+          tableCreationError
+        );
+      }
+    }
     
     // Log detailed signup response
     console.log('Signup response:', {
