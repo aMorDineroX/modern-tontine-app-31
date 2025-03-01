@@ -129,6 +129,98 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
       }
     });
 
+    // If signup fails, handle potential issues
+    if (authError) {
+      // Detailed error logging
+      console.error('Signup Error Details:', {
+        code: authError.code,
+        message: authError.message,
+        status: authError.status
+      });
+
+      // Handle rate limiting errors
+      if (authError.status === 429) {
+        throw new AuthServiceError(
+          'Trop de tentatives d\'inscription. Veuillez réessayer dans quelques minutes.',
+          '429',
+          authError
+        );
+      }
+
+      // Handle email already in use
+      if (
+        authError.message.includes('already in use') || 
+        authError.message.includes('email already registered')
+      ) {
+        throw new AuthServiceError(
+          'Cette adresse email est déjà utilisée.',
+          'EMAIL_IN_USE',
+          authError
+        );
+      }
+
+      // Handle database or table-related errors
+      const isDatabaseError = 
+        authError.code === 'PGRST116' || // Table does not exist
+        authError.code === '42P01' || // Undefined table
+        authError.message.includes('Database error') ||
+        authError.message.includes('table does not exist');
+
+      if (isDatabaseError) {
+        console.warn('Signup failed due to database issue. Attempting to create profiles table...');
+        
+        try {
+          // Try to create a dummy record to ensure the table exists
+          await supabase.from('profiles').insert([{
+            id: authData?.user?.id || '00000000-0000-0000-0000-000000000000',
+            email: credentials.email,
+            full_name: credentials.fullName || 'New User'
+          }]);
+          
+          // Remove the dummy record
+          await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', '00000000-0000-0000-0000-000000000000');
+          
+          // Retry signup after attempting to create the table
+          const { data: retryAuthData, error: retryAuthError } = await supabase.auth.signUp({
+            email: credentials.email,
+            password: credentials.password,
+            options: {
+              data: {
+                full_name: credentials.fullName
+              }
+            }
+          });
+          
+          if (retryAuthError) {
+            console.error('Signup failed after table creation attempt:', retryAuthError);
+            throw retryAuthError;
+          }
+          
+          return {
+            user: retryAuthData.user,
+            session: retryAuthData.session
+          };
+        } catch (tableCreationError) {
+          console.error('Critical error during signup table creation:', tableCreationError);
+          throw new AuthServiceError(
+            'Erreur critique lors de l\'inscription. Impossible de créer le profil utilisateur.',
+            'DATABASE_SETUP_FAILED',
+            tableCreationError
+          );
+        }
+      }
+
+      // For any other unexpected errors
+      throw new AuthServiceError(
+        'Une erreur inattendue est survenue lors de l\'inscription.',
+        'UNEXPECTED_ERROR',
+        authError
+      );
+    }
+
     // If signup fails, handle potential database-related issues
     if (authError) {
       // Check for specific error codes or messages related to table or database issues

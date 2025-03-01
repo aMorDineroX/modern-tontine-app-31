@@ -10,6 +10,11 @@ function getSupabaseConfig() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
 
+  // Validate configuration
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('Supabase configuration is incomplete. Authentication may not work.');
+  }
+
   // Log configuration details (only in development)
   if (import.meta.env.DEV) {
     console.log('Supabase Configuration:', {
@@ -57,17 +62,39 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Enhanced health check function
 export async function checkSupabaseAvailability(): Promise<boolean> {
   try {
-    // Try to get the session as a simple availability check
-    const { data, error } = await supabase.auth.getSession();
-    
-    if (error) {
-      console.error('Supabase availability check failed:', error);
+    // Try multiple methods to check availability
+    try {
+      // Try to get the session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.warn('Session check failed:', sessionError);
+        return false;
+      }
+    } catch (sessionCheckError) {
+      console.error('Error checking session:', sessionCheckError);
+      return false;
+    }
+
+    try {
+      // Try to do a simple table select to check database connectivity
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+      
+      if (error) {
+        console.warn('Profiles table check failed:', error);
+        return false;
+      }
+    } catch (tableCheckError) {
+      console.error('Error checking profiles table:', tableCheckError);
       return false;
     }
     
     return true;
   } catch (error) {
-    console.error('Error checking Supabase availability:', error);
+    console.error('Comprehensive Supabase availability check failed:', error);
     return false;
   }
 }
