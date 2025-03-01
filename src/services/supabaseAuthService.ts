@@ -129,6 +129,68 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
       }
     });
 
+    // If signup fails due to database issues, try to handle it gracefully
+    if (authError) {
+      // Check for specific error codes or messages related to table or database issues
+      const isDatabaseError = 
+        authError.code === 'PGRST116' || // Table does not exist
+        authError.code === '42P01' || // Undefined table
+        authError.message.includes('Database error') ||
+        authError.message.includes('table does not exist');
+
+      if (isDatabaseError) {
+        console.warn('Signup failed due to database issue. Attempting to create profiles table...');
+        
+        try {
+          // Try to create the profiles table directly
+          const { error: tableCreateError } = await supabase.from('profiles').insert([
+            {
+              id: authData?.user?.id || '00000000-0000-0000-0000-000000000000',
+              email: credentials.email,
+              full_name: credentials.fullName || '',
+              created_at: new Date().toISOString()
+            }
+          ]);
+          
+          if (tableCreateError) {
+            console.error('Failed to create profiles table:', tableCreateError);
+            throw tableCreateError;
+          }
+          
+          // Retry signup after creating the table
+          const { data: retryAuthData, error: retryAuthError } = await supabase.auth.signUp({
+            email: credentials.email,
+            password: credentials.password,
+            options: {
+              data: {
+                full_name: credentials.fullName
+              }
+            }
+          });
+          
+          if (retryAuthError) {
+            console.error('Signup failed after table creation:', retryAuthError);
+            throw retryAuthError;
+          }
+          
+          return {
+            user: retryAuthData.user,
+            session: retryAuthData.session
+          };
+        } catch (tableCreationError) {
+          console.error('Critical error during signup table creation:', tableCreationError);
+          throw new AuthServiceError(
+            'Erreur critique lors de l\'inscription. Impossible de créer le profil utilisateur.',
+            'DATABASE_SETUP_FAILED',
+            tableCreationError
+          );
+        }
+      }
+      
+      // If it's not a database error, throw the original error
+      throw authError;
+    }
+
     // If signup fails due to database issues, try to create the profiles table
     if (authError && (
       authError.message.includes('Database error') || 

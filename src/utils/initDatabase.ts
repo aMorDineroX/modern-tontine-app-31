@@ -11,142 +11,15 @@ export async function initializeDatabase(): Promise<void> {
   try {
     console.log('Initializing database...');
     
-    // Check if the profiles table exists
-    const { data: tableExists, error: tableCheckError } = await supabase.rpc(
-      'check_table_exists',
-      { table_name: 'profiles' }
-    );
+    // Create the profiles table directly
+    await createProfilesTable();
     
-    if (tableCheckError) {
-      console.warn('Error checking if profiles table exists:', tableCheckError);
-      // Create the check_table_exists function if it doesn't exist
-      await createTableExistsFunction();
-      
-      // Try again after creating the function
-      const { data: tableExistsRetry } = await supabase.rpc(
-        'check_table_exists',
-        { table_name: 'profiles' }
-      );
-      
-      if (!tableExistsRetry) {
-        await createProfilesTable();
-      }
-    } else if (!tableExists) {
-      await createProfilesTable();
-    } else {
-      console.log('Profiles table already exists');
-    }
-    
-    // Check if the handle_new_user trigger function exists
-    const { data: triggerExists, error: triggerCheckError } = await supabase.rpc(
-      'check_function_exists',
-      { function_name: 'handle_new_user' }
-    );
-    
-    if (triggerCheckError) {
-      console.warn('Error checking if handle_new_user function exists:', triggerCheckError);
-      // Create the check_function_exists function if it doesn't exist
-      await createFunctionExistsFunction();
-      
-      // Try again after creating the function
-      const { data: triggerExistsRetry } = await supabase.rpc(
-        'check_function_exists',
-        { function_name: 'handle_new_user' }
-      );
-      
-      if (!triggerExistsRetry) {
-        await createHandleNewUserFunction();
-      }
-    } else if (!triggerExists) {
-      await createHandleNewUserFunction();
-    } else {
-      console.log('handle_new_user function already exists');
-    }
+    // Create the handle_new_user function and trigger
+    await createHandleNewUserFunction();
     
     console.log('Database initialization complete');
   } catch (error) {
     console.error('Error initializing database:', error);
-  }
-}
-
-/**
- * Create the check_table_exists function
- */
-async function createTableExistsFunction(): Promise<void> {
-  try {
-    const { error } = await supabase.rpc('create_check_table_exists_function');
-    
-    if (error) {
-      console.error('Error creating check_table_exists function:', error);
-      
-      // Try to create the function directly
-      const { error: directError } = await supabase.query(`
-        CREATE OR REPLACE FUNCTION check_table_exists(table_name text)
-        RETURNS boolean
-        LANGUAGE plpgsql
-        SECURITY DEFINER
-        AS $$
-        BEGIN
-          RETURN EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = $1
-          );
-        END;
-        $$;
-      `);
-      
-      if (directError) {
-        console.error('Error creating check_table_exists function directly:', directError);
-      } else {
-        console.log('Successfully created check_table_exists function directly');
-      }
-    } else {
-      console.log('Successfully created check_table_exists function');
-    }
-  } catch (error) {
-    console.error('Error in createTableExistsFunction:', error);
-  }
-}
-
-/**
- * Create the check_function_exists function
- */
-async function createFunctionExistsFunction(): Promise<void> {
-  try {
-    const { error } = await supabase.rpc('create_check_function_exists_function');
-    
-    if (error) {
-      console.error('Error creating check_function_exists function:', error);
-      
-      // Try to create the function directly
-      const { error: directError } = await supabase.query(`
-        CREATE OR REPLACE FUNCTION check_function_exists(function_name text)
-        RETURNS boolean
-        LANGUAGE plpgsql
-        SECURITY DEFINER
-        AS $$
-        BEGIN
-          RETURN EXISTS (
-            SELECT FROM pg_proc
-            JOIN pg_namespace ON pg_namespace.oid = pg_proc.pronamespace
-            WHERE pg_proc.proname = $1
-            AND pg_namespace.nspname = 'public'
-          );
-        END;
-        $$;
-      `);
-      
-      if (directError) {
-        console.error('Error creating check_function_exists function directly:', directError);
-      } else {
-        console.log('Successfully created check_function_exists function directly');
-      }
-    } else {
-      console.log('Successfully created check_function_exists function');
-    }
-  } catch (error) {
-    console.error('Error in createFunctionExistsFunction:', error);
   }
 }
 
@@ -157,91 +30,52 @@ async function createProfilesTable(): Promise<void> {
   try {
     console.log('Creating profiles table...');
     
-    // Try to use the create_profiles_table function if it exists
-    const { error: functionError } = await supabase.rpc('create_profiles_table');
+    // Check if the table exists
+    const { data, error: checkError } = await supabase
+      .from('profiles')
+      .select('id')
+      .limit(1);
     
-    if (functionError) {
-      console.warn('Error using create_profiles_table function:', functionError);
+    if (checkError && checkError.code === 'PGRST116') { // Table does not exist
+      console.log('Profiles table does not exist. Creating...');
       
-      // Try to create the table directly
-      const { error } = await supabase.query(`
-        CREATE TABLE IF NOT EXISTS public.profiles (
-          id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-          email TEXT NOT NULL,
-          full_name TEXT,
-          avatar_url TEXT,
-          phone_number TEXT,
-          preferred_language TEXT DEFAULT 'fr',
-          notification_preferences JSONB DEFAULT '{"email": true, "push": true, "sms": false}'::jsonb,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-        );
-        
-        -- Set up Row Level Security (RLS)
-        ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-        
-        -- Create policies
-        DO $$
-        BEGIN
-          -- Users can view their own profile
-          IF NOT EXISTS (
-            SELECT FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can view their own profile'
-          ) THEN
-            CREATE POLICY "Users can view their own profile"
-              ON public.profiles
-              FOR SELECT
-              USING (auth.uid() = id);
-          END IF;
-          
-          -- Users can update their own profile
-          IF NOT EXISTS (
-            SELECT FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can update their own profile'
-          ) THEN
-            CREATE POLICY "Users can update their own profile"
-              ON public.profiles
-              FOR UPDATE
-              USING (auth.uid() = id);
-          END IF;
-          
-          -- Users can insert their own profile
-          IF NOT EXISTS (
-            SELECT FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can insert their own profile'
-          ) THEN
-            CREATE POLICY "Users can insert their own profile"
-              ON public.profiles
-              FOR INSERT
-              WITH CHECK (auth.uid() = id);
-          END IF;
-        END
-        $$;
-        
-        -- Create a function for updating the updated_at column
-        CREATE OR REPLACE FUNCTION public.set_updated_at()
-        RETURNS TRIGGER AS $$
-        BEGIN
-          NEW.updated_at = now();
-          RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-        
-        -- Create a trigger to update the updated_at column
-        DROP TRIGGER IF EXISTS set_updated_at ON public.profiles;
-        CREATE TRIGGER set_updated_at
-          BEFORE UPDATE ON public.profiles
-          FOR EACH ROW
-          EXECUTE FUNCTION public.set_updated_at();
-      `);
+      // Create the table using Supabase's table methods
+      const { error } = await supabase.rpc('create_profiles_table', {});
       
       if (error) {
-        console.error('Error creating profiles table directly:', error);
-      } else {
-        console.log('Successfully created profiles table directly');
+        console.warn('Error using create_profiles_table function, attempting direct creation:', error);
+        
+        // Direct table creation using Supabase management methods
+        const { error: createError } = await supabase.from('profiles').insert([
+          {
+            id: '00000000-0000-0000-0000-000000000000', // Dummy record to create table
+            email: 'dummy@example.com',
+            full_name: 'Dummy User'
+          }
+        ]);
+        
+        if (createError) {
+          console.error('Failed to create profiles table:', createError);
+          throw createError;
+        }
+        
+        // Remove the dummy record
+        await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', '00000000-0000-0000-0000-000000000000');
       }
+      
+      console.log('Profiles table created successfully');
+    } else if (checkError) {
+      console.error('Error checking profiles table:', checkError);
+      throw checkError;
     } else {
-      console.log('Successfully created profiles table using function');
+      console.log('Profiles table already exists');
     }
   } catch (error) {
     console.error('Error in createProfilesTable:', error);
+    throw error;
   }
 }
 
@@ -252,39 +86,54 @@ async function createHandleNewUserFunction(): Promise<void> {
   try {
     console.log('Creating handle_new_user function and trigger...');
     
-    // Create the function and trigger
-    const { error } = await supabase.query(`
-      -- Function to create a new profile when a user signs up
-      CREATE OR REPLACE FUNCTION public.handle_new_user()
-      RETURNS TRIGGER AS $$
-      BEGIN
-        INSERT INTO public.profiles (id, email, full_name, created_at)
-        VALUES (
-          NEW.id, 
-          NEW.email, 
-          COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-          NOW()
-        );
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql SECURITY DEFINER;
-      
-      -- Drop the trigger if it exists
-      DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-      
-      -- Create the trigger
-      CREATE TRIGGER on_auth_user_created
-        AFTER INSERT ON auth.users
-        FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-    `);
+    // Create the function using Supabase RPC
+    const { error: functionError } = await supabase.rpc('create_handle_new_user_function', {});
     
-    if (error) {
-      console.error('Error creating handle_new_user function and trigger:', error);
-    } else {
-      console.log('Successfully created handle_new_user function and trigger');
+    if (functionError) {
+      console.warn('Error creating handle_new_user function:', functionError);
+      
+      // Fallback to direct SQL if RPC fails
+      try {
+        const { error } = await supabase.sql(`
+          -- Function to create a new profile when a user signs up
+          CREATE OR REPLACE FUNCTION public.handle_new_user()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            INSERT INTO public.profiles (id, email, full_name, created_at)
+            VALUES (
+              NEW.id, 
+              NEW.email, 
+              COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+              NOW()
+            )
+            ON CONFLICT (id) DO NOTHING;
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql SECURITY DEFINER;
+          
+          -- Drop the trigger if it exists
+          DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+          
+          -- Create the trigger
+          CREATE TRIGGER on_auth_user_created
+            AFTER INSERT ON auth.users
+            FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+        `);
+        
+        if (error) {
+          console.error('Error creating handle_new_user function and trigger directly:', error);
+          throw error;
+        }
+      } catch (directError) {
+        console.error('Critical error creating handle_new_user function:', directError);
+        throw directError;
+      }
     }
+    
+    console.log('Successfully created handle_new_user function and trigger');
   } catch (error) {
     console.error('Error in createHandleNewUserFunction:', error);
+    throw error;
   }
 }
 
