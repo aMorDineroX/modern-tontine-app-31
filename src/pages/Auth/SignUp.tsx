@@ -21,7 +21,7 @@ export default function SignUp() {
     fullName?: string;
   }>({});
   
-  const { signUp } = useAuth();
+  const { signup } = useAuth();
   const { t } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -81,17 +81,63 @@ export default function SignUp() {
     
     try {
       setIsSubmitting(true);
-      const success = await signUp(email, password, fullName);
+      const success = await signup(email, password, fullName);
       
       if (success) {
         navigate("/dashboard");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sign up error:", error);
+      
+      // Handle specific error types
+      let errorTitle = "Sign Up Failed";
+      let errorDescription = "An error occurred during sign up. Please try again.";
+      
+      // Check if it's a rate limiting error (429)
+      if (error.message && error.message.includes("429")) {
+        errorTitle = "Too Many Attempts";
+        errorDescription = "You've made too many sign-up attempts. Please wait a few minutes before trying again.";
+      } 
+      // Check for profile creation error
+      else if (error.message && (
+        error.message.includes("profil") || 
+        error.message.includes("Profile creation failed")
+      )) {
+        errorTitle = "Account Partially Created";
+        errorDescription = "Your account was created, but we couldn't set up your profile completely. Some features may be limited. Please try signing in.";
+        
+        // Redirect to sign in page after a short delay
+        setTimeout(() => {
+          navigate("/signin");
+        }, 3000);
+      }
+      // Check for database errors
+      else if (error.message && (
+        error.message.includes("base de données") || 
+        error.message.includes("Database error")
+      )) {
+        errorTitle = "Server Error";
+        errorDescription = "We're experiencing temporary server issues. Please try again in a few moments.";
+      }
+      // Check for other common errors
+      else if (error.message) {
+        if (error.message.includes("email already in use") || error.message.includes("already exists")) {
+          errorTitle = "Email Already Registered";
+          errorDescription = "This email address is already registered. Please use a different email or try signing in.";
+        } else if (error.message.includes("network") || error.message.includes("connection")) {
+          errorTitle = "Network Error";
+          errorDescription = "Please check your internet connection and try again.";
+        } else if (error.message.includes("Invalid email") || error.message.includes("mot de passe")) {
+          errorTitle = "Invalid Input";
+          errorDescription = "Please check your email and password and try again.";
+        }
+      }
+      
       toast({
-        title: "Sign Up Failed",
-        description: "An error occurred during sign up. Please try again.",
-        variant: "destructive"
+        title: errorTitle,
+        description: errorDescription,
+        variant: "destructive",
+        icon: <AlertCircle className="text-white" />
       });
     } finally {
       setIsSubmitting(false);

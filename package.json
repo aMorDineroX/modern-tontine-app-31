@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d dist",
+    "env:setup": "node scripts/setup-env.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AuthProvider } from '@/services/authService';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 
 interface SocialLoginButtonsProps {
   onSuccess?: () => void;
@@ -12,17 +13,25 @@ const SocialLoginButtons: React.FC<SocialLoginButtonsProps> = ({
   onSuccess,
   className = ''
 }) => {
-  const { signInWithSocial, loading } = useAuth();
+  const { loginWithProvider, loading } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleSocialLogin = async (provider: AuthProvider) => {
-    const success = await signInWithSocial(provider);
-    if (success) {
+    try {
+      await loginWithProvider(provider);
       if (onSuccess) {
         onSuccess();
       } else {
         navigate('/dashboard');
       }
+    } catch (error) {
+      console.error('Social login error:', error);
+      toast({
+        title: 'Login Failed',
+        description: 'An error occurred during social login. Please try again.',
+        variant: 'destructive'
+      });
     }
   };
 

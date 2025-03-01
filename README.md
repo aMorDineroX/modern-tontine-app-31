@@ -1,112 +1,63 @@
-# Modern Tontine App
+# Tontine App
 
-## About
+## Project Setup
 
-Modern Tontine App is a web application that helps users manage and participate in tontine groups. A tontine is a financial arrangement where members contribute to a fund and receive benefits based on predefined rules.
+### Prerequisites
+- Node.js (v18+ recommended)
+- npm or yarn
 
-## Getting Started
+### Installation Steps
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+1. Clone the repository
+```bash
+git clone https://github.com/your-username/tontine-app.git
+cd tontine-app
+```
 
-Follow these steps:
+2. Install dependencies
+```bash
+npm install
+```
 
-```sh
-# Step 1: Clone the repository
-git clone https://github.com/your-username/modern-tontine-app-31.git
+3. Set up environment variables
+```bash
+npm run env:setup
+```
+This script will guide you through setting up your `.env` file with Supabase credentials.
 
-# Step 2: Navigate to the project directory
-cd modern-tontine-app-31
+### Environment Variables
+Create a `.env` file with the following variables:
+- `VITE_SUPABASE_URL`: Your Supabase project URL
+- `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
 
-# Step 3: Install the necessary dependencies
-npm i
+### Running the Application
 
-# Step 4: Start the development server
+- Development mode:
+```bash
 npm run dev
 ```
 
-## Technologies Used
+- Build for production:
+```bash
+npm run build
+```
 
-This project is built with:
+### Troubleshooting
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-- React Router
-- React Query
+#### Signup Issues
+If you encounter signup problems:
+1. Check your Supabase project configuration
+2. Verify email settings
+3. Check RLS (Row Level Security) policies
+4. Ensure all required fields are present
 
-## Deployment
-
-You can deploy this project using:
-
-- GitHub Pages (configured in package.json)
-- Netlify
-- Vercel
-- Any other static site hosting service
+#### Database Connection
+- Verify your database credentials
+- Check network connectivity
+- Ensure you have the correct permissions
 
 ## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
 
 ## License
-
-This project is licensed under the MIT License.
-
-
-next steps:
-
- Gestion des cycles de tontine
-Planification des cycles : Permettre de définir la durée d'un cycle complet de tontine (3 mois, 6 mois, 1 an)
-Rotation automatique : Système pour déterminer automatiquement l'ordre des bénéficiaires (aléatoire, fixe, basé sur des critères)
-Calendrier des paiements : Visualisation du calendrier avec les dates de contribution et de distribution
-2. Système de paiement et transactions
-Intégration de passerelles de paiement : Mobile Money (Orange Money, MTN Mobile Money), cartes bancaires, virements
-Rappels automatiques : Notifications avant les échéances de paiement
-Suivi des retards : Système de gestion des retards de paiement avec pénalités configurables
-Reçus électroniques : Génération automatique de reçus pour chaque transaction
-3. Gestion des membres
-Système d'invitation : Permettre aux administrateurs d'inviter de nouveaux membres par email ou SMS
-Profils détaillés : Ajouter des informations supplémentaires comme les coordonnées bancaires, l'historique de participation
-Système de notation : Évaluation des membres basée sur leur fiabilité de paiement
-Parrainage : Système permettant aux membres existants de parrainer de nouveaux membres
-4. Fonctionnalités de communication
-Messagerie interne : Chat intégré pour les membres d'un même groupe
-Forum de discussion : Espace d'échange pour chaque groupe de tontine
-Annonces importantes : Système pour diffuser des informations importantes à tous les membres
-Votes et sondages : Permettre aux membres de voter sur des décisions importantes (changement de montant, exclusion d'un membre, etc.)
-5. Gestion des risques
-Contrats numériques : Génération de contrats électroniques entre les membres
-Système de garantie : Possibilité de demander des garanties aux membres (documents, caution)
-Gestion des conflits : Processus de médiation en cas de désaccord
-Assurance tontine : Option pour sécuriser le fonds en cas de défaillance d'un membre
-6. Statistiques et rapports
-Tableau de bord analytique : Visualisation des statistiques de participation, contributions, etc.
-Rapports financiers : Génération de rapports détaillés sur l'état financier de la tontine
-Historique complet : Accès à l'historique détaillé de toutes les transactions
-Prévisions financières : Calculs prévisionnels des gains futurs
-7. Personnalisation et types de tontines
-Différents modèles de tontine : Support pour différents types (tontine simple, tontine avec intérêts, tontine avec enchères)
-Règles personnalisables : Possibilité de définir des règles spécifiques pour chaque groupe
-Thèmes et branding : Personnalisation visuelle des groupes de tontine
-Objectifs collectifs : Définition d'objectifs communs pour l'utilisation des fonds
-8. Fonctionnalités mobiles avancées
-Application mobile native : Versions iOS et Android pour une meilleure expérience
-Mode hors ligne : Accès à certaines fonctionnalités sans connexion internet
-Notifications push : Alertes en temps réel pour les événements importants
-Scan de documents : Possibilité de scanner des pièces d'identité ou documents officiels
-9. Intégration sociale et communautaire
-Partage sur réseaux sociaux : Possibilité de partager les réussites du groupe
-Témoignages : Espace pour partager des histoires de réussite grâce à la tontine
-Système de recommandation : Recommandation de groupes similaires aux membres
-Événements communautaires : Organisation de rencontres virtuelles ou physiques
-10. Sécurité renforcée
-Authentification multi-facteurs : Renforcement de la sécurité des comptes
-Vérification d'identité : Processus de vérification KYC (Know Your Customer)
-Journalisation des activités : Suivi détaillé de toutes les actions effectuées
-Chiffrement des données sensibles : Protection renforcée des informations financières
-
-11.Intégration avec un backend pour stocker les données
-Ajout de notifications pour les échéances
-Système de validation des paiements
-Rapports financiers détaillés
+This project is licensed under the MIT License - see the LICENSE.md file for details.

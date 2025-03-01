@@ -1,412 +1,425 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import authService, { User, Permission, UserRole, AuthProvider } from '@/services/authService';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Session } from '@supabase/supabase-js';
+import { User } from '@/utils/supabase';
+import supabaseAuthService, { AuthServiceError } from '@/services/supabaseAuthService';
+import { supabase } from '@/utils/supabase';
+import { retryWithBackoff, isRetryableError, rateLimitCheck } from '@/utils/retryUtils';
 
-interface Session {
-  user: User;
-  token: string;
-  expiresAt: number;
-  refreshToken?: string;
+// Types
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  loginWithProvider: (provider: 'google' | 'facebook' | 'twitter' | 'apple') => Promise<void>;
+  signup: (email: string, password: string, fullName: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  updateProfile: (data: {
+    fullName?: string;
+    avatarUrl?: string;
+    phoneNumber?: string;
+    preferredLanguage?: string;
+    notificationPreferences?: {
+      email: boolean;
+      push: boolean;
+      sms: boolean;
+    };
+  }) => Promise<User>;
+  uploadAvatar: (file: File) => Promise<string>;
+  refreshUser: () => Promise<void>;
+  refreshSession: () => Promise<boolean>;
 }
 
-type AuthContextType = {
-  session: Session | null;
-  user: User | null;
-  loading: boolean;
-  isAuthenticated: boolean;
-  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
-  signUp: (email: string, password: string, fullName: string) => Promise<boolean>;
-  signInWithSocial: (provider: AuthProvider) => Promise<boolean>;
-  signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  updateProfile: (userData: Partial<User>) => Promise<boolean>;
-  refreshSession: () => Promise<boolean>;
-  hasPermission: (permission: Permission) => boolean;
-  hasRole: (role: UserRole) => boolean;
-  hasAllPermissions: (permissions: Permission[]) => boolean;
-  hasAnyPermission: (permissions: Permission[]) => boolean;
-};
+// Créer le contexte avec des valeurs par défaut
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  session: null,
+  isLoading: true,
+  isAuthenticated: false,
+  login: async () => false,
+  loginWithProvider: async () => {},
+  signup: async () => false,
+  logout: async () => {},
+  resetPassword: async () => {},
+  updatePassword: async () => {},
+  updateProfile: async () => ({ id: '', email: '', created_at: '' }),
+  uploadAvatar: async () => '',
+  refreshUser: async () => {},
+  refreshSession: async () => false,
+});
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Hook personnalisé pour utiliser le contexte d'authentification
+export const useAuth = () => useContext(AuthContext);
 
+// Fournisseur du contexte d'authentification
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const { toast } = useToast();
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Initialiser l'état d'authentification à partir du stockage au montage
+  // Fonction de rafraîchissement de session
+  const refreshSession = async () => {
+    try {
+      // Attempt to get the current session
+      const currentSession = await supabaseAuthService.getCurrentSession();
+      
+      // If a session exists, update the state
+      if (currentSession) {
+        setSession(currentSession);
+        
+        // Also refresh the user data
+        const currentUser = await supabaseAuthService.getCurrentUser();
+        setUser(currentUser);
+        
+        return true;
+      }
+      
+      // No session found
+      setSession(null);
+      setUser(null);
+      return false;
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement de la session:', error);
+      setSession(null);
+      setUser(null);
+      return false;
+    }
+  };
+
+  // Initialiser l'état d'authentification
   useEffect(() => {
     const initAuth = async () => {
-      const { token, refreshToken, user, expiresAt } = authService.getAuthData();
-      
-      if (token && user && expiresAt) {
-        // Vérifier si le token est expiré
-        if (expiresAt > Date.now()) {
-          setSession({ user, token, expiresAt, refreshToken: refreshToken || undefined });
-          setUser(user);
-          setIsAuthenticated(true);
-        } else {
-          // Token expiré, essayer de rafraîchir si un refreshToken est disponible
-          if (refreshToken) {
-            try {
-              const response = await authService.refreshToken(refreshToken);
-              setSession({
-                user: response.user,
-                token: response.token,
-                expiresAt: response.expiresAt,
-                refreshToken: response.refreshToken
-              });
-              setUser(response.user);
-              setIsAuthenticated(true);
-            } catch (error) {
-              // Échec du rafraîchissement, effacer les données
-              authService.clearAuthData();
-            }
-          } else {
-            // Pas de refreshToken, effacer les données
-            authService.clearAuthData();
-          }
+      setIsLoading(true);
+      try {
+        // Récupérer la session actuelle
+        const currentSession = await supabaseAuthService.getCurrentSession();
+        setSession(currentSession);
+
+        // Récupérer l'utilisateur si une session existe
+        if (currentSession) {
+          const currentUser = await supabaseAuthService.getCurrentUser();
+          setUser(currentUser);
+        }
+      } catch (error) {
+        console.error('Erreur lors de l\'initialisation de l\'authentification:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Écouter les changements d'authentification
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          const currentUser = await supabaseAuthService.getCurrentUser();
+          setUser(currentUser);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
         }
       }
-      
-      setLoading(false);
+    );
+
+    // Nettoyer l'abonnement
+    return () => {
+      subscription.unsubscribe();
     };
-    
-    initAuth();
   }, []);
 
-  // Configurer un minuteur pour vérifier l'expiration du token
-  useEffect(() => {
-    if (!session) return;
+  // Fonction de connexion avec gestion des erreurs améliorée
+  const login = async (email: string, password: string) => {
+    setIsLoading(true);
     
-    const timeUntilExpiry = session.expiresAt - Date.now();
-    if (timeUntilExpiry <= 0) {
-      signOut();
-      return;
+    // Check client-side rate limiting first (but bypass in development)
+    if (!import.meta.env.DEV && !rateLimitCheck('login', 5, 60000)) {
+      throw new AuthServiceError('Trop de tentatives de connexion. Veuillez réessayer plus tard.', '429');
     }
-    
-    // Configurer un minuteur pour rafraîchir le token avant qu'il n'expire
-    const refreshTimer = setTimeout(() => {
-      refreshSession();
-    }, timeUntilExpiry - 60000); // Rafraîchir 1 minute avant l'expiration
-    
-    return () => clearTimeout(refreshTimer);
-  }, [session]);
-
-  const refreshSession = async (): Promise<boolean> => {
-    if (!session || !session.refreshToken) return false;
     
     try {
-      const response = await authService.refreshToken(session.refreshToken);
+      // Use retry with backoff for login
+      const result = await retryWithBackoff(
+        async () => {
+          const response = await supabaseAuthService.login({
+            email,
+            password,
+          });
+          
+          if (response.error) throw new Error(response.error);
+          return response;
+        },
+        2, // Max 2 retries
+        1000, // Base delay of 1 second
+        (error) => {
+          // Only retry on network errors or rate limiting, not on invalid credentials
+          return isRetryableError(error) && 
+                 !(error.message && (
+                   error.message.includes('Invalid credentials') || 
+                   error.message.includes('Identifiants invalides')
+                 ));
+        }
+      );
       
-      setSession({
-        user: response.user,
-        token: response.token,
-        expiresAt: response.expiresAt,
-        refreshToken: response.refreshToken
-      });
-      setUser(response.user);
-      setIsAuthenticated(true);
-      
+      setSession(result.session);
+      setUser(result.user);
       return true;
     } catch (error) {
-      console.error("Échec du rafraîchissement de la session:", error);
-      // En cas d'échec, déconnecter l'utilisateur
-      signOut();
-      return false;
+      console.error('Erreur de connexion:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const signIn = async (email: string, password: string, rememberMe = false): Promise<boolean> => {
-    setLoading(true);
+  // Fonction de connexion avec un fournisseur OAuth
+  const loginWithProvider = async (provider: 'google' | 'facebook' | 'twitter' | 'apple') => {
     try {
-      // Valider le format de l'email
-      if (!authService.isValidEmail(email)) {
-        toast({
-          title: "Email invalide",
-          description: "Veuillez entrer une adresse email valide",
-          variant: "destructive"
-        });
-        return false;
-      }
+      await supabaseAuthService.loginWithProvider(provider);
+      // La redirection se fait automatiquement, donc pas besoin de mettre à jour l'état ici
+    } catch (error) {
+      console.error(`Erreur de connexion avec ${provider}:`, error);
+      throw error;
+    }
+  };
 
-      // Appeler le service de connexion
-      const response = await authService.login({ email, password }, rememberMe);
+  // Fonction d'inscription avec gestion des erreurs améliorée
+  const signup = async (email: string, password: string, fullName: string) => {
+    setIsLoading(true);
+    
+    // Check client-side rate limiting first (but bypass in development)
+    if (!import.meta.env.DEV && !rateLimitCheck('signup', 3, 3600000)) { // 3 attempts per hour
+      throw new AuthServiceError('Trop de tentatives d\'inscription. Veuillez réessayer plus tard.', '429');
+    }
+    
+    try {
+      // Use retry with backoff for signup
+      const result = await retryWithBackoff(
+        async () => {
+          try {
+            const response = await supabaseAuthService.signup({
+              email,
+              password,
+              fullName,
+            });
+            
+            // Log detailed signup response
+            console.log('Signup response in context:', {
+              user: response.user ? { 
+                id: response.user.id, 
+                email: response.user.email 
+              } : null,
+              session: response.session ? 'Session exists' : 'No session',
+              error: response.error
+            });
+            
+            if (response.error) {
+              console.warn('Signup completed with warning:', response.error);
+            }
+            
+            return response;
+          } catch (error: any) {
+            // Log detailed error information
+            console.error('Signup attempt error:', {
+              name: error.name,
+              message: error.message,
+              details: error
+            });
+            
+            // Don't retry on validation errors or "email already in use" errors
+            if (error.message && (
+              error.message.includes('email invalide') ||
+              error.message.includes('mot de passe') ||
+              error.message.includes('déjà utilisée')
+            )) {
+              throw error; // Don't retry these errors
+            }
+            
+            // For database errors, we want to retry
+            if (error.message && (
+              error.message.includes('base de données') || 
+              error.message.includes('Database error')
+            )) {
+              console.warn('Database error during signup, will retry:', error.message);
+              throw error; // This will be retried
+            }
+            
+            // For other errors, check if they're retryable
+            if (!isRetryableError(error)) {
+              throw error; // Don't retry non-retryable errors
+            }
+            
+            console.warn('Retryable error during signup:', error.message);
+            throw error; // This will be retried
+          }
+        },
+        2, // Max 2 retries
+        2000, // Base delay of 2 seconds
+        (error) => {
+          // Only retry on network errors, database errors or rate limiting
+          return isRetryableError(error) || 
+                 (error.message && (
+                   error.message.includes('base de données') || 
+                   error.message.includes('Database error')
+                 ));
+        }
+      );
       
-      // Mettre à jour l'état avec la réponse
-      setUser(response.user);
-      setSession({
-        user: response.user,
-        token: response.token,
-        expiresAt: response.expiresAt,
-        refreshToken: response.refreshToken
-      });
-      setIsAuthenticated(true);
-      
-      toast({
-        title: "Connexion réussie",
-        description: "Bienvenue !",
-      });
-      
+      setSession(result.session);
+      setUser(result.user);
       return true;
-    } catch (error) {
-      console.error("Erreur de connexion:", error);
+    } catch (error: any) {
+      console.error('Comprehensive Signup Error:', {
+        name: error.name,
+        message: error.message,
+        details: error
+      });
       
-      let errorMessage = "Email ou mot de passe invalide";
-      if (error instanceof Error) {
-        errorMessage = error.message;
+      // Create a more user-friendly error message
+      if (error.message && (
+        error.message.includes('base de données') || 
+        error.message.includes('Database error')
+      )) {
+        throw new AuthServiceError(
+          'Erreur temporaire du serveur. Veuillez réessayer dans quelques instants.',
+          error.code,
+          error
+        );
       }
-      
-      toast({
-        title: "Échec de la connexion",
-        description: errorMessage,
-        variant: "destructive"
-      });
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signUp = async (email: string, password: string, fullName: string): Promise<boolean> => {
-    setLoading(true);
-    try {
-      // Appeler le service d'inscription
-      const response = await authService.signup({ email, password, fullName });
-      
-      // Mettre à jour l'état avec la réponse
-      setUser(response.user);
-      setSession({
-        user: response.user,
-        token: response.token,
-        expiresAt: response.expiresAt,
-        refreshToken: response.refreshToken
-      });
-      setIsAuthenticated(true);
-      
-      toast({
-        title: "Inscription réussie",
-        description: "Bienvenue sur Tontine !",
-      });
-      
-      return true;
-    } catch (error) {
-      console.error("Erreur d'inscription:", error);
-      
-      // Afficher un message d'erreur approprié en fonction de l'erreur
-      let errorMessage = "Une erreur inattendue s'est produite. Veuillez réessayer.";
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: "Échec de l'inscription",
-        description: errorMessage,
-        variant: "destructive"
-      });
-      
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signInWithSocial = async (provider: AuthProvider): Promise<boolean> => {
-    setLoading(true);
-    try {
-      // Simuler un token d'accès obtenu du fournisseur OAuth
-      const mockAccessToken = `mock_${provider}_token_${Math.random().toString(36).substring(2, 15)}`;
-      
-      // Appeler le service de connexion sociale
-      const response = await authService.socialLogin(provider, mockAccessToken);
-      
-      // Mettre à jour l'état avec la réponse
-      setUser(response.user);
-      setSession({
-        user: response.user,
-        token: response.token,
-        expiresAt: response.expiresAt,
-        refreshToken: response.refreshToken
-      });
-      setIsAuthenticated(true);
-      
-      toast({
-        title: "Connexion réussie",
-        description: `Bienvenue ${response.user.name} !`,
-      });
-      
-      return true;
-    } catch (error) {
-      console.error(`Erreur de connexion via ${provider}:`, error);
-      
-      let errorMessage = `Échec de la connexion via ${provider}`;
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: "Échec de la connexion",
-        description: errorMessage,
-        variant: "destructive"
-      });
-      
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signOut = async () => {
-    setLoading(true);
-    try {
-      // Appeler le service de déconnexion
-      await authService.logout();
-      
-      // Réinitialiser l'état
-      setUser(null);
-      setSession(null);
-      setIsAuthenticated(false);
-
-      // Afficher le toast de déconnexion
-      toast({
-        title: "Déconnecté",
-        description: "Vous avez été déconnecté avec succès",
-      });
-    } catch (error) {
-      console.error("Erreur de déconnexion:", error);
-      toast({
-        title: "Erreur",
-        description: "Échec de la déconnexion",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const resetPassword = async (email: string) => {
-    setLoading(true);
-    try {
-      // Appeler le service de réinitialisation du mot de passe
-      await authService.resetPassword(email);
-      
-      toast({
-        title: "Réinitialisation du mot de passe",
-        description: "Les instructions de réinitialisation du mot de passe ont été envoyées à votre email",
-      });
-    } catch (error) {
-      console.error("Erreur de réinitialisation du mot de passe:", error);
-      
-      let errorMessage = "Échec de l'envoi du lien de réinitialisation. Veuillez réessayer.";
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: "Échec de la réinitialisation",
-        description: errorMessage,
-        variant: "destructive"
-      });
       
       throw error;
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
-  
-  const updateProfile = async (userData: Partial<User>): Promise<boolean> => {
-    if (!user || !session) return false;
-    
-    setLoading(true);
+
+  // Fonction de déconnexion
+  const logout = async () => {
+    setIsLoading(true);
     try {
-      // Appeler le service de mise à jour du profil
-      const updatedUser = await authService.updateUserProfile(userData, session.token);
-      
-      // Mettre à jour l'état
-      setUser(updatedUser);
-      setSession({
-        ...session,
-        user: updatedUser
-      });
-      
-      toast({
-        title: "Profil mis à jour",
-        description: "Votre profil a été mis à jour avec succès",
-      });
-      
-      return true;
+      await supabaseAuthService.logout();
+      setUser(null);
+      setSession(null);
     } catch (error) {
-      console.error("Erreur de mise à jour du profil:", error);
+      console.error('Erreur de déconnexion:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fonction de réinitialisation de mot de passe
+  const resetPassword = async (email: string) => {
+    // Check client-side rate limiting (but bypass in development)
+    if (!import.meta.env.DEV && !rateLimitCheck('resetPassword', 2, 3600000)) { // 2 attempts per hour
+      throw new AuthServiceError('Trop de tentatives de réinitialisation. Veuillez réessayer plus tard.', '429');
+    }
+    
+    try {
+      await supabaseAuthService.resetPassword(email);
+    } catch (error) {
+      console.error('Erreur de réinitialisation de mot de passe:', error);
+      throw error;
+    }
+  };
+
+  // Fonction de mise à jour de mot de passe
+  const updatePassword = async (newPassword: string) => {
+    try {
+      await supabaseAuthService.updatePassword(newPassword);
+    } catch (error) {
+      console.error('Erreur de mise à jour de mot de passe:', error);
+      throw error;
+    }
+  };
+
+  // Fonction de mise à jour du profil
+  const updateProfile = async (data: {
+    fullName?: string;
+    avatarUrl?: string;
+    phoneNumber?: string;
+    preferredLanguage?: string;
+    notificationPreferences?: {
+      email: boolean;
+      push: boolean;
+      sms: boolean;
+    };
+  }) => {
+    try {
+      if (!user) throw new Error('Utilisateur non authentifié');
       
-      let errorMessage = "Échec de la mise à jour de votre profil";
-      if (error instanceof Error) {
-        errorMessage = error.message;
+      const updatedUser = await supabaseAuthService.updateProfile(user.id, {
+        fullName: data.fullName,
+        avatarUrl: data.avatarUrl,
+        phoneNumber: data.phoneNumber,
+        preferredLanguage: data.preferredLanguage,
+        notificationPreferences: data.notificationPreferences,
+      });
+      
+      setUser(updatedUser);
+      return updatedUser;
+    } catch (error) {
+      console.error('Erreur de mise à jour du profil:', error);
+      throw error;
+    }
+  };
+
+  // Fonction de téléchargement d'avatar
+  const uploadAvatar = async (file: File) => {
+    try {
+      if (!user) throw new Error('Utilisateur non authentifié');
+      
+      const avatarUrl = await supabaseAuthService.uploadAvatar(user.id, file);
+      
+      // Mettre à jour l'utilisateur avec la nouvelle URL d'avatar
+      setUser(prev => prev ? { ...prev, avatar_url: avatarUrl } : null);
+      
+      return avatarUrl;
+    } catch (error) {
+      console.error('Erreur de téléchargement d\'avatar:', error);
+      throw error;
+    }
+  };
+
+  // Fonction pour rafraîchir les données de l'utilisateur
+  const refreshUser = async () => {
+    try {
+      if (!session) {
+        setUser(null);
+        return;
       }
       
-      toast({
-        title: "Échec de la mise à jour",
-        description: errorMessage,
-        variant: "destructive"
-      });
-      return false;
-    } finally {
-      setLoading(false);
+      const currentUser = await supabaseAuthService.getCurrentUser();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement des données utilisateur:', error);
+      throw error;
     }
   };
 
-  // Fonctions de vérification des permissions et des rôles
-  const hasPermission = (permission: Permission): boolean => {
-    if (!user) return false;
-    return user.permissions.includes(permission);
-  };
-
-  const hasRole = (role: UserRole): boolean => {
-    if (!user) return false;
-    return user.role === role;
-  };
-
-  const hasAllPermissions = (permissions: Permission[]): boolean => {
-    if (!user) return false;
-    return permissions.every(permission => user.permissions.includes(permission));
-  };
-
-  const hasAnyPermission = (permissions: Permission[]): boolean => {
-    if (!user) return false;
-    return permissions.some(permission => user.permissions.includes(permission));
-  };
-
-  const value: AuthContextType = {
-    session,
+  // Valeur du contexte
+  const value = {
     user,
-    loading,
-    isAuthenticated,
-    signIn,
-    signUp,
-    signInWithSocial,
-    signOut,
+    session,
+    isLoading,
+    isAuthenticated: !!session,
+    login,
+    loginWithProvider,
+    signup,
+    logout,
     resetPassword,
+    updatePassword,
     updateProfile,
+    uploadAvatar,
+    refreshUser,
     refreshSession,
-    hasPermission,
-    hasRole,
-    hasAllPermissions,
-    hasAnyPermission
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth doit être utilisé à l\'intérieur d\'un AuthProvider');
-  }
-  return context;
-};
+export default AuthContext;

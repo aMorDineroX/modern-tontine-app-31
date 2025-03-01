@@ -13,7 +13,7 @@ export default function SignIn() {
   const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{email?: string; password?: string}>({});
-  const { signIn } = useAuth();
+  const { login } = useAuth();
   const { t } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -51,16 +51,34 @@ export default function SignIn() {
     setIsSubmitting(true);
 
     try {
-      const success = await signIn(email, password, rememberMe);
+      const success = await login(email, password);
+      
       if (success) {
         console.log("User signed in, navigating to dashboard");
         navigate("/dashboard");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sign in error:", error);
+      
+      // Handle specific error types
+      let errorTitle = "Login Failed";
+      let errorDescription = "Invalid email or password. Please try again.";
+      
+      if (error.message) {
+        if (error.message.includes("429") || error.message.includes("Too Many Requests")) {
+          errorTitle = "Too Many Attempts";
+          errorDescription = "You've made too many sign-in attempts. Please wait a few minutes before trying again.";
+        } else if (error.message.includes("network") || error.message.includes("connection")) {
+          errorTitle = "Network Error";
+          errorDescription = "Please check your internet connection and try again.";
+        } else if (error.message.includes("Invalid credentials") || error.message.includes("Identifiants invalides")) {
+          // Keep the default error message for invalid credentials
+        }
+      }
+      
       toast({
-        title: "Login Failed",
-        description: "Invalid email or password. Please try again.",
+        title: errorTitle,
+        description: errorDescription,
         variant: "destructive"
       });
     } finally {
