@@ -1,15 +1,28 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Get Supabase configuration from environment variables
-// Using hardcoded fallback values for development in case environment variables fail to load
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://qgpqiehjmkfxfnfrowbc.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFncHFpZWhqbWtmeGZuZnJvd2JjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA3MDkzNzUsImV4cCI6MjA1NjI4NTM3NX0.pYcG26WQa-6rIfDcE5mDjNhGbhYAlTMOvCxfYtNmu-0';
+// Fallback values for Supabase configuration
+const FALLBACK_SUPABASE_URL = 'https://qgpqiehjmkfxfnfrowbc.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFncHFpZWhqbWtmeGZuZnJvd2JjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA3MDkzNzUsImV4cCI6MjA1NjI4NTM3NX0.pYcG26WQa-6rIfDcE5mDjNhGbhYAlTMOvCxfYtNmu-0';
 
-// Log the actual values being used (only in development)
-if (import.meta.env.DEV) {
-  console.log('Using Supabase URL:', supabaseUrl);
-  console.log('Using Supabase Anon Key:', supabaseAnonKey.substring(0, 10) + '...');
+// Validate and get Supabase configuration
+function getSupabaseConfig() {
+  // Try to get configuration from environment variables
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY;
+
+  // Log configuration details (only in development)
+  if (import.meta.env.DEV) {
+    console.log('Supabase Configuration:', {
+      url: supabaseUrl ? 'Configured' : 'Missing',
+      anonKey: supabaseAnonKey ? 'Configured' : 'Missing'
+    });
+  }
+
+  return { supabaseUrl, supabaseAnonKey };
 }
+
+// Get Supabase configuration
+const { supabaseUrl, supabaseAnonKey } = getSupabaseConfig();
 
 // Create Supabase client with robust configuration
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -41,10 +54,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// Add a simple health check function
-// This will be used to check if Supabase is available
-supabase.functions.setAuth(supabaseAnonKey);
-
 // Enhanced health check function
 export async function checkSupabaseAvailability(): Promise<boolean> {
   try {
@@ -61,14 +70,6 @@ export async function checkSupabaseAvailability(): Promise<boolean> {
     console.error('Error checking Supabase availability:', error);
     return false;
   }
-}
-
-// Log environment configuration (only in development)
-if (import.meta.env.DEV) {
-  console.log('Supabase Configuration:', {
-    url: supabaseUrl ? 'Configured' : 'Missing',
-    anonKey: supabaseAnonKey ? 'Configured' : 'Missing'
-  });
 }
 
 // Define User type for use throughout the application

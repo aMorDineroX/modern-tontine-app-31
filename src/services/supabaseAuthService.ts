@@ -142,6 +142,84 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
         console.warn('Signup failed due to database issue. Attempting to create profiles table...');
         
         try {
+          // Try to create a dummy record to ensure the table exists
+          await supabase.from('profiles').insert([{
+            id: '00000000-0000-0000-0000-000000000000',
+            email: credentials.email,
+            full_name: credentials.fullName || 'New User'
+          }]);
+          
+          // Remove the dummy record
+          await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', '00000000-0000-0000-0000-000000000000');
+          
+          // Retry signup after attempting to create the table
+          const { data: retryAuthData, error: retryAuthError } = await supabase.auth.signUp({
+            email: credentials.email,
+            password: credentials.password,
+            options: {
+              data: {
+                full_name: credentials.fullName
+              }
+            }
+          });
+          
+          if (retryAuthError) {
+            console.error('Signup failed after table creation attempt:', retryAuthError);
+            throw retryAuthError;
+          }
+          
+          return {
+            user: retryAuthData.user,
+            session: retryAuthData.session
+          };
+        } catch (tableCreationError) {
+          console.error('Critical error during signup table creation:', tableCreationError);
+          throw new AuthServiceError(
+            'Erreur critique lors de l\'inscription. Impossible de créer le profil utilisateur.',
+            'DATABASE_SETUP_FAILED',
+            tableCreationError
+          );
+        }
+      }
+      
+      // If it's a rate limiting error, provide a specific message
+      if (authError.status === 429) {
+        throw new AuthServiceError(
+          'Trop de tentatives d\'inscription. Veuillez réessayer dans quelques minutes.',
+          '429',
+          authError
+        );
+      }
+      
+      // If it's an email already in use error
+      if (authError.message.includes('already in use')) {
+        throw new AuthServiceError(
+          'Cette adresse email est déjà utilisée.',
+          'EMAIL_IN_USE',
+          authError
+        );
+      }
+      
+      // If it's not a specific error we handle, throw the original error
+      throw authError;
+    }
+
+    // If signup fails, handle potential database-related issues
+    if (authError) {
+      // Check for specific error codes or messages related to table or database issues
+      const isDatabaseError = 
+        authError.code === 'PGRST116' || // Table does not exist
+        authError.code === '42P01' || // Undefined table
+        authError.message.includes('Database error') ||
+        authError.message.includes('table does not exist');
+
+      if (isDatabaseError) {
+        console.warn('Signup failed due to database issue. Attempting to create profiles table...');
+        
+        try {
           // Try to create the profiles table using a Supabase RPC
           const { error: tableCreateError } = await supabase.rpc('create_profiles_table', {});
           

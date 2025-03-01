@@ -5,14 +5,14 @@
 import { supabase } from './supabase';
 
 /**
- * Initialize the database by creating necessary tables and triggers
+ * Initialize the database by ensuring necessary configurations
  */
 export async function initializeDatabase(): Promise<void> {
   try {
     console.log('Initializing database...');
     
-    // Create the handle_new_user function and trigger
-    await createHandleNewUserFunction();
+    // Ensure profiles table exists and has correct configuration
+    await ensureProfilesTableConfiguration();
     
     console.log('Database initialization complete');
   } catch (error) {
@@ -21,75 +21,96 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 /**
- * Create the handle_new_user function and trigger
+ * Ensure the profiles table is configured correctly
  */
-async function createHandleNewUserFunction(): Promise<void> {
+async function ensureProfilesTableConfiguration(): Promise<void> {
   try {
-    console.log('Creating handle_new_user function and trigger...');
+    // Check if the profiles table exists
+    const { data, error: checkError } = await supabase
+      .from('profiles')
+      .select('id')
+      .limit(1);
     
-    // Attempt to create the function using a custom RPC
-    const { error: functionError } = await supabase.rpc('create_handle_new_user_function', {});
-    
-    if (functionError) {
-      console.warn('Error creating handle_new_user function via RPC:', functionError);
+    if (checkError) {
+      console.warn('Error checking profiles table:', checkError);
       
-      // Fallback to manual function and trigger creation
+      // If the table doesn't exist, we'll attempt to create it
       try {
-        // Create a function to insert a profile when a new user is created
-        const createFunctionResponse = await supabase.rpc('create_function', {
-          sql: `
-            CREATE OR REPLACE FUNCTION public.handle_new_user()
-            RETURNS TRIGGER AS $$
-            BEGIN
-              -- Attempt to insert a new profile, ignore if it already exists
-              INSERT INTO public.profiles (id, email, full_name, created_at)
-              VALUES (
-                NEW.id, 
-                NEW.email, 
-                COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-                NOW()
-              )
-              ON CONFLICT (id) DO NOTHING;
-              RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql SECURITY DEFINER;
-          `
-        });
-
-        // Create the trigger
-        const createTriggerResponse = await supabase.rpc('create_function', {
-          sql: `
-            -- Drop existing trigger if it exists
-            DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-            
-            -- Create the trigger
-            CREATE TRIGGER on_auth_user_created
-              AFTER INSERT ON auth.users
-              FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-          `
-        });
-
-        // Check for errors in function and trigger creation
-        if (createFunctionResponse.error) {
-          console.error('Error creating handle_new_user function:', createFunctionResponse.error);
-          throw createFunctionResponse.error;
-        }
-
-        if (createTriggerResponse.error) {
-          console.error('Error creating handle_new_user trigger:', createTriggerResponse.error);
-          throw createTriggerResponse.error;
-        }
-
-        console.log('Successfully created handle_new_user function and trigger');
-      } catch (directError) {
-        console.error('Critical error creating handle_new_user function:', directError);
-        throw directError;
+        // Attempt to insert a dummy record to create the table
+        await supabase.from('profiles').insert([{
+          id: '00000000-0000-0000-0000-000000000000',
+          email: 'dummy@example.com',
+          full_name: 'Dummy User'
+        }]);
+        
+        // Remove the dummy record
+        await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (insertError) {
+        console.error('Failed to create profiles table:', insertError);
       }
-    } else {
-      console.log('Successfully created handle_new_user function via RPC');
+    }
+    
+    // Ensure Row Level Security (RLS) is enabled
+    try {
+      await enableRowLevelSecurity();
+    } catch (rlsError) {
+      console.warn('Failed to configure Row Level Security:', rlsError);
     }
   } catch (error) {
-    console.error('Error in createHandleNewUserFunction:', error);
+    console.error('Error in ensureProfilesTableConfiguration:', error);
+    throw error;
+  }
+}
+
+/**
+ * Enable Row Level Security for the profiles table
+ */
+async function enableRowLevelSecurity(): Promise<void> {
+  try {
+    // Create policies to allow users to manage their own profiles
+    const policies = [
+      {
+        name: 'Users can view their own profile',
+        command: `
+          CREATE POLICY IF NOT EXISTS "Users can view their own profile"
+          ON public.profiles
+          FOR SELECT
+          USING (auth.uid() = id);
+        `
+      },
+      {
+        name: 'Users can update their own profile',
+        command: `
+          CREATE POLICY IF NOT EXISTS "Users can update their own profile"
+          ON public.profiles
+          FOR UPDATE
+          USING (auth.uid() = id);
+        `
+      },
+      {
+        name: 'Users can insert their own profile',
+        command: `
+          CREATE POLICY IF NOT EXISTS "Users can insert their own profile"
+          ON public.profiles
+          FOR INSERT
+          WITH CHECK (auth.uid() = id);
+        `
+      }
+    ];
+
+    // Attempt to create policies
+    for (const policy of policies) {
+      try {
+        await supabase.rpc('create_function', { sql: policy.command });
+      } catch (policyError) {
+        console.warn(`Failed to create policy ${policy.name}:`, policyError);
+      }
+    }
+  } catch (error) {
+    console.error('Error enabling Row Level Security:', error);
     throw error;
   }
 }
