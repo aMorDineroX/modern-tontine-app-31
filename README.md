@@ -29,6 +29,40 @@ This script will guide you through setting up your `.env` file with Supabase cre
 Create a `.env` file with the following variables:
 - `VITE_SUPABASE_URL`: Your Supabase project URL
 - `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+- `DATABASE_HOST`: Your Supabase database host
+- `DATABASE_PORT`: Your Supabase database port (usually 5432)
+- `DATABASE_NAME`: Your Supabase database name (usually postgres)
+- `DATABASE_USER`: Your Supabase database user (usually postgres)
+- `DATABASE_PASSWORD`: Your Supabase database password (JWT secret)
+
+### Supabase Configuration
+
+#### Getting Your Supabase Credentials
+
+1. Log in to your Supabase dashboard at https://app.supabase.io
+2. Select your project
+3. Go to Project Settings > API
+4. Copy the following information:
+   - Project URL: Use as `VITE_SUPABASE_URL`
+   - anon/public API Key: Use as `VITE_SUPABASE_ANON_KEY`
+   - Database Password: Use as `DATABASE_PASSWORD`
+5. For database connection details:
+   - Go to Project Settings > Database
+   - Use the connection information provided there
+
+#### Setting Up Tables
+
+The application requires the following tables in your Supabase project:
+- profiles
+- tontine_groups
+- tontine_members
+- contributions
+- payouts
+- transactions
+- notifications
+- payment_methods
+
+These tables are automatically created when you run the application for the first time.
 
 ### Running the Application
 
