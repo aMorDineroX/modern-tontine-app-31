@@ -68,6 +68,27 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10
     }
+  },
+  // Add custom error handling for database operations
+  db: {
+    schema: 'public',
+    onError: (error) => {
+      console.error('Supabase Database Error:', {
+        code: error.code,
+        message: error.message,
+        details: error
+      });
+
+      // Handle specific error scenarios
+      if (error.code === 'PGRST116') {
+        console.warn('Table does not exist. Attempting to create...');
+        // You could trigger a table creation function here
+      }
+
+      if (error.message.includes('duplicate key')) {
+        console.warn('Duplicate key error. This might be expected in some scenarios.');
+      }
+    }
   }
 });
 

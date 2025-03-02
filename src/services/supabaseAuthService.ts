@@ -647,6 +647,51 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
     // Si l'inscription a réussi, créer le profil utilisateur
     if (authData.user) {
       try {
+        // First, try to create the profiles table if it doesn't exist
+        const { error: tableCreateError } = await supabase.rpc('create_profiles_table', {});
+        
+        if (tableCreateError) {
+          console.warn('Failed to create profiles table via RPC:', tableCreateError);
+          
+          // Fallback: Try to create the table using a direct SQL query
+          try {
+            await supabase.query(`
+              CREATE TABLE IF NOT EXISTS public.profiles (
+                id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+                email TEXT NOT NULL,
+                full_name TEXT,
+                avatar_url TEXT,
+                phone_number TEXT,
+                preferred_language TEXT DEFAULT 'fr',
+                notification_preferences JSONB DEFAULT '{"email": true, "push": true, "sms": false}'::jsonb,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+              );
+              
+              -- Set up Row Level Security (RLS)
+              ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+              
+              -- Create policies
+              CREATE POLICY IF NOT EXISTS "Users can view their own profile"
+                ON public.profiles
+                FOR SELECT
+                USING (auth.uid() = id);
+              
+              CREATE POLICY IF NOT EXISTS "Users can update their own profile"
+                ON public.profiles
+                FOR UPDATE
+                USING (auth.uid() = id);
+              
+              CREATE POLICY IF NOT EXISTS "Users can insert their own profile"
+                ON public.profiles
+                FOR INSERT
+                WITH CHECK (auth.uid() = id);
+            `);
+          } catch (directQueryError) {
+            console.error('Failed to create profiles table via direct query:', directQueryError);
+          }
+        }
+        
         // Create user profile using the database service
         const userProfile = await createUserProfile({
           id: authData.user.id,
@@ -665,18 +710,57 @@ export const signup = async (credentials: SignupCredentials): Promise<AuthRespon
           details: profileError
         });
         
-        // Instead of trying to delete the auth user, just return the basic user info
-        // This allows the user to continue with the app even if profile creation failed
-        return {
-          user: {
-            id: authData.user.id,
-            email: credentials.email,
-            full_name: credentials.fullName,
-            created_at: new Date().toISOString()
-          },
-          session: authData.session,
-          error: 'Profile creation failed, but authentication succeeded. Some features may be limited.'
-        };
+        // Attempt to insert the profile directly if createUserProfile fails
+        try {
+          const { data: directInsertData, error: directInsertError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: authData.user.id,
+              email: credentials.email,
+              full_name: credentials.fullName,
+              created_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+          
+          if (directInsertError) {
+            console.error('Direct profile insert failed:', directInsertError);
+            
+            // If direct insert fails, return basic user info
+            return {
+              user: {
+                id: authData.user.id,
+                email: credentials.email,
+                full_name: credentials.fullName,
+                created_at: new Date().toISOString()
+              },
+              session: authData.session,
+              error: 'Profile creation failed. Some features may be limited.'
+            };
+          }
+          
+          return {
+            user: directInsertData[0] || {
+              id: authData.user.id,
+              email: credentials.email,
+              full_name: credentials.fullName,
+              created_at: new Date().toISOString()
+            },
+            session: authData.session
+          };
+        } catch (directInsertCatchError) {
+          console.error('Comprehensive profile insert error:', directInsertCatchError);
+          
+          // Return basic user info as a last resort
+          return {
+            user: {
+              id: authData.user.id,
+              email: credentials.email,
+              full_name: credentials.fullName,
+              created_at: new Date().toISOString()
+            },
+            session: authData.session,
+            error: 'Profile creation failed. Some features may be limited.'
+          };
+        }
       }
     }
     
